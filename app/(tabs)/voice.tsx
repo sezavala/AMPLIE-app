@@ -1,24 +1,64 @@
 import { useState } from "react";
 import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
 import { Audio } from "expo-av";
+import { useRouter } from "expo-router";
 import { useColors } from "@/lib/useColors";
+import { useConsent } from "@/lib/consent";
 
 export default function VoiceScreen() {
   const c = useColors();
+  const router = useRouter();
+  const { loaded, consent } = useConsent(); // make sure we don't render early
+
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [uri, setUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // --- 1) Loading state (before consent is loaded) ---
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  // --- 2) Blocked state (voice consent is off) ---
+  if (!consent?.voice) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center" }}>
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: "800", marginBottom: 8 }}>
+          Microphone disabled
+        </Text>
+        <Text style={{ color: c.sub, marginBottom: 12 }}>
+          You denied voice snippets. Enable it in Consent to use recording.
+        </Text>
+        <Pressable
+          onPress={() => router.push("/consent")}
+          style={{ backgroundColor: c.text, borderRadius: 16, paddingVertical: 12, alignItems: "center" }}
+        >
+          <Text style={{ color: c.bg, fontWeight: "700" }}>Open Consent</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // --- 3) Allowed state (recorder UI) ---
   async function startRecording() {
     try {
       const perm = await Audio.requestPermissionsAsync();
-      if (!perm.granted) return Alert.alert("Microphone access denied");
+      if (!perm.granted) {
+        Alert.alert("Microphone access denied");
+        return;
+      }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
       const rec = new Audio.Recording();
       await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       await rec.startAsync();
       setRecording(rec);
-    } catch (e: any) { Alert.alert("Record error", e?.message ?? String(e)); }
+    } catch (e: any) {
+      Alert.alert("Record error", e?.message ?? String(e));
+    }
   }
 
   async function stopRecording() {
@@ -28,8 +68,11 @@ export default function VoiceScreen() {
       await recording.stopAndUnloadAsync();
       setUri(recording.getURI() ?? null);
       setRecording(null);
-    } catch (e: any) { Alert.alert("Stop error", e?.message ?? String(e)); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      Alert.alert("Stop error", e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function playLast() {
@@ -37,13 +80,28 @@ export default function VoiceScreen() {
     try {
       setBusy(true);
       const { sound } = await Audio.Sound.createAsync({ uri });
-      sound.setOnPlaybackStatusUpdate(s => { if (s.isLoaded && s.didJustFinish) sound.unloadAsync(); });
+      sound.setOnPlaybackStatusUpdate((s) => {
+        if (s.isLoaded && s.didJustFinish) sound.unloadAsync();
+      });
       await sound.playAsync();
-    } catch (e: any) { Alert.alert("Play error", e?.message ?? String(e)); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      Alert.alert("Play error", e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const Btn = ({ title, onPress, ghost=false, disabled=false }: any) => (
+  const Btn = ({
+    title,
+    onPress,
+    ghost = false,
+    disabled = false,
+  }: {
+    title: string;
+    onPress: () => void;
+    ghost?: boolean;
+    disabled?: boolean;
+  }) => (
     <Pressable
       onPress={onPress}
       disabled={disabled}
@@ -59,20 +117,30 @@ export default function VoiceScreen() {
         marginRight: 10,
       }}
     >
-      {busy && !ghost ? <ActivityIndicator color={c.bg} /> :
-        <Text style={{ color: ghost ? c.text : c.bg, fontWeight: "700" }}>{title}</Text>}
+      {busy && !ghost ? (
+        <ActivityIndicator color={c.bg} />
+      ) : (
+        <Text style={{ color: ghost ? c.text : c.bg, fontWeight: "700" }}>{title}</Text>
+      )}
     </Pressable>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center" }}>
       <Text style={{ color: c.text, fontSize: 22, fontWeight: "800", marginBottom: 12 }}>Voice</Text>
+
       <View style={{ flexDirection: "row", marginBottom: 8 }}>
-        {!recording ? <Btn title="Start recording" onPress={startRecording} disabled={busy} />
-                    : <Btn title="Stop" onPress={stopRecording} disabled={busy} />}
+        {!recording ? (
+          <Btn title="Start recording" onPress={startRecording} disabled={busy} />
+        ) : (
+          <Btn title="Stop" onPress={stopRecording} disabled={busy} />
+        )}
         <Btn title="Play last" onPress={playLast} ghost disabled={!uri || busy} />
       </View>
-      <Text style={{ color: c.sub }}>{recording ? "Recording…" : uri ? `Saved: ${uri}` : "No recording yet"}</Text>
+
+      <Text style={{ color: c.sub, marginTop: 8 }}>
+        {recording ? "Recording…" : uri ? `Saved: ${uri}` : "No recording yet"}
+      </Text>
     </View>
   );
 }

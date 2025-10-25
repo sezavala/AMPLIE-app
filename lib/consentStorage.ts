@@ -2,37 +2,29 @@ import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const KEY = "consent.v1";
-const isWeb = Platform.OS === "web";
 
-export type ConsentPrefs = {
-  consentGiven: boolean;
-  localOnly: boolean;
-  allowGroup: boolean;
+export type Consent = {
+  voice: boolean;   // mic / voice snippets
+  text: boolean;    // text analysis
+  history: boolean; // saving results locally or to cloud
+  ts: number;       // epoch millis
 };
 
-export async function saveConsent(prefs: ConsentPrefs) {
-  const value = JSON.stringify(prefs);
-  if (isWeb) {
-    // Web fallback (not secure, but fine for dev/demo)
-    window.localStorage.setItem(KEY, value);
-    return;
-  }
-  await SecureStore.setItemAsync(KEY, value);
+const isWeb = Platform.OS === "web";
+
+export async function saveConsent(c: Consent) {
+  const json = JSON.stringify(c);
+  if (isWeb) localStorage.setItem(KEY, json);
+  else await SecureStore.setItemAsync(KEY, json);
 }
 
-export async function loadConsent(): Promise<ConsentPrefs | null> {
-  if (isWeb) {
-    const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as ConsentPrefs) : null;
-  }
-  const raw = await SecureStore.getItemAsync(KEY);
-  return raw ? (JSON.parse(raw) as ConsentPrefs) : null;
+export async function loadConsent(): Promise<Consent | null> {
+  const json = isWeb ? localStorage.getItem(KEY) : await SecureStore.getItemAsync(KEY);
+  if (!json) return null;
+  try { return JSON.parse(json) as Consent; } catch { return null; }
 }
 
 export async function clearConsent() {
-  if (isWeb) {
-    window.localStorage.removeItem(KEY);
-    return;
-  }
-  await SecureStore.deleteItemAsync(KEY);
+  if (isWeb) localStorage.removeItem(KEY);
+  else await SecureStore.deleteItemAsync(KEY);
 }

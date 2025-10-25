@@ -1,10 +1,13 @@
 import { View, Text, Pressable } from "react-native";
 import { router } from "expo-router";
 import { useColors } from "@/lib/useColors";
+import { useConsent } from "@/lib/consent";
 
 export default function HomeTab() {
   const c = useColors();
-
+  const {consent} = useConsent();
+  const goReflect = () => consent?.text ? router.push("/input") : router.push("/consent");
+  const goWork    = () => consent?.text ? router.push("/input") : router.push("/consent");
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center", alignItems: "center", padding: 24 }}>
       <Text style={{ color: c.text, fontSize: 22, fontWeight: "800", marginBottom: 8 }}>
