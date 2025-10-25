@@ -1,21 +1,11 @@
-// app/(tabs)/index.tsx
-import { View, Text, Pressable } from "react-native";
-import { router } from "expo-router";
+import { View, Text } from "react-native";
 
-export default function HomeTab() {
+export default function Home() {
   return (
-    <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center", padding: 24 }}>
-      <Text style={{ color: "#fff", fontSize: 22, fontWeight: "800", marginBottom: 8 }}>
-        How should we play?
+    <View className="flex-1 items-center justify-center bg-indigo-600">
+      <Text className="text-white text-3xl font-bold">
+        Tailwind Works 🎉
       </Text>
-      <Pressable onPress={() => router.push("/input")}
-        style={{ backgroundColor:"#fff", paddingVertical:12, paddingHorizontal:18, borderRadius:16, marginTop:10 }}>
-        <Text style={{ color:"#000", fontWeight:"700" }}>Reflect my mood</Text>
-      </Pressable>
-      <Pressable onPress={() => router.push("/input")}
-        style={{ borderWidth:1, borderColor:"rgba(255,255,255,0.2)", paddingVertical:12, paddingHorizontal:18, borderRadius:16, marginTop:10 }}>
-        <Text style={{ color:"#fff", fontWeight:"700" }}>Work with my mood</Text>
-      </Pressable>
     </View>
   );
 }
