@@ -1,8 +1,4 @@
-// babel.config.js (root)
-module.exports = function (api) {
+module.exports = (api) => {
   api.cache(true);
-  return {
-    presets: ["babel-preset-expo"],
-    plugins: ["expo-router/babel"], // (add "nativewind/babel" later, not now)
-  };
+  return { presets: ["babel-preset-expo"], plugins: ["expo-router/babel"] };
 };
