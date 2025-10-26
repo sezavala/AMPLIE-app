@@ -17,38 +17,15 @@ export const unstable_settings = {
   anchor: '(tabs)', 
 };
 
-const PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string;
-
-
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const segments = useSegments(); // e.g. ['(tabs)'] or ['(auth)']
-  const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    const inAuthGroup = segments[0] === '(auth)'; // public routes
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace('/(auth)/sign-in');
-    } else if (isSignedIn && inAuthGroup) {
-      router.replace('/(tabs)');
-    }
-  }, [isLoaded, isSignedIn, segments]);
-
-  return <>{children}</>;
-}
-
-function InnerLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <QueryClientProvider client={qc}>
+      <Shell>
+        <Stack screenOptions={{ headerShown: false }} />
+      </Shell>
+    </QueryClientProvider>
   );
 }
 
