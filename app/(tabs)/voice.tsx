@@ -5,16 +5,19 @@ import { useRouter } from "expo-router";
 import { useColors } from "@/lib/useColors";
 import { useConsent } from "@/lib/consent";
 
+type Mode = "reflect" | "work";
+
 export default function VoiceScreen() {
   const c = useColors();
   const router = useRouter();
-  const { loaded, consent } = useConsent(); // make sure we don't render early
+  const { loaded, consent } = useConsent();
 
+  const [mode, setMode] = useState<Mode>("reflect");
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [uri, setUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // --- 1) Loading state (before consent is loaded) ---
+  // ---- loading / blocked states ----
   if (!loaded) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center", alignItems: "center" }}>
@@ -22,8 +25,6 @@ export default function VoiceScreen() {
       </View>
     );
   }
-
-  // --- 2) Blocked state (voice consent is off) ---
   if (!consent?.voice) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center" }}>
@@ -43,7 +44,7 @@ export default function VoiceScreen() {
     );
   }
 
-  // --- 3) Allowed state (recorder UI) ---
+  // ---- recorder ----
   async function startRecording() {
     try {
       const perm = await Audio.requestPermissionsAsync();
@@ -56,6 +57,7 @@ export default function VoiceScreen() {
       await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       await rec.startAsync();
       setRecording(rec);
+      setUri(null); // reset previous clip
     } catch (e: any) {
       Alert.alert("Record error", e?.message ?? String(e));
     }
@@ -91,17 +93,16 @@ export default function VoiceScreen() {
     }
   }
 
+  function analyze() {
+    if (!uri) return;
+    // send the audio clip for analysis later; for now just pass params
+    router.push({ pathname: "/result", params: { src: "voice", mode } });
+  }
+
+  // ---- tiny UI helpers ----
   const Btn = ({
-    title,
-    onPress,
-    ghost = false,
-    disabled = false,
-  }: {
-    title: string;
-    onPress: () => void;
-    ghost?: boolean;
-    disabled?: boolean;
-  }) => (
+    title, onPress, ghost = false, disabled = false,
+  }: { title: string; onPress: () => void; ghost?: boolean; disabled?: boolean }) => (
     <Pressable
       onPress={onPress}
       disabled={disabled}
@@ -125,10 +126,39 @@ export default function VoiceScreen() {
     </Pressable>
   );
 
-  return (
-    <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center" }}>
-      <Text style={{ color: c.text, fontSize: 22, fontWeight: "800", marginBottom: 12 }}>Voice</Text>
+  const ModeBtn = ({ value, label }: { value: Mode; label: string }) => {
+    const selected = mode === value;
+    return (
+      <Pressable
+        onPress={() => setMode(value)}
+        style={{
+          flex: 1,
+          paddingVertical: 10,
+          borderRadius: 12,
+          alignItems: "center",
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: selected ? c.card : "transparent",
+        }}
+      >
+        <Text style={{ color: selected ? c.text : c.sub, fontWeight: "700" }}>{label}</Text>
+      </Pressable>
+    );
+  };
 
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg, padding: 24 }}>
+      <Text style={{ color: c.text, fontSize: 22, fontWeight: "800", marginBottom: 12 }}>
+        Voice
+      </Text>
+
+      {/* Mode picker */}
+      <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+        <ModeBtn value="reflect" label="Reflect" />
+        <ModeBtn value="work" label="Work With" />
+      </View>
+
+      {/* Recorder controls */}
       <View style={{ flexDirection: "row", marginBottom: 8 }}>
         {!recording ? (
           <Btn title="Start recording" onPress={startRecording} disabled={busy} />
@@ -138,9 +168,17 @@ export default function VoiceScreen() {
         <Btn title="Play last" onPress={playLast} ghost disabled={!uri || busy} />
       </View>
 
-      <Text style={{ color: c.sub, marginTop: 8 }}>
-        {recording ? "Recording…" : uri ? `Saved: ${uri}` : "No recording yet"}
+      <Text style={{ color: c.sub, marginTop: 8, marginBottom: 16 }}>
+        {recording ? "Recording…" : uri ? `Saved clip: ${uri}` : "No recording yet"}
       </Text>
+
+      {/* Analyze (enabled after you have a clip) */}
+      <Btn title="Analyze" onPress={analyze} disabled={!uri || busy} />
+      {!uri && (
+        <Text style={{ color: c.sub, marginTop: 8 }}>
+          Record a short clip, then tap Analyze.
+        </Text>
+      )}
     </View>
   );
 }
