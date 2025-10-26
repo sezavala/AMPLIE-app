@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColors } from "@/lib/useColors";
-import { post } from "@/lib/api";
+import { generatePlaylist } from "@/lib/grock";
 
 export default function PlaylistScreen() {
   const c = useColors();
@@ -32,22 +32,10 @@ export default function PlaylistScreen() {
 
       try {
         setLoading(true);
-
-        // Step 1: Get policy from emotion
-        const policyRes = await post<{
-          tempo: number;
-          energy: number;
-          valence: number;
-          genres: string[];
-        }>("/policy", { emotion, mode: "major" });
-
-        // Step 2: Retrieve matching tracks
-        const tracksRes = await post<{ items: any[] }>("/retrieve", {
-          policy: policyRes,
-          k: 10,
-        });
-
-        setTracks(tracksRes.items || []);
+        // Use local grock generator to produce a policy and 10 tracks.
+        const { policy, items } = generatePlaylist(emotion as string, mode as any, 10);
+        // we don't currently surface policy in this tabbed view, but keep items
+        setTracks(items || []);
       } catch (err: any) {
         console.error("Failed to fetch playlist:", err);
         setError(err.message || "Failed to load playlist");
@@ -111,20 +99,12 @@ export default function PlaylistScreen() {
                 borderColor: c.border,
               }}
             >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 8,
-                }}
-              >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Text style={{ color: c.sub, fontSize: 16, marginRight: 8 }}>
                   {index + 1}.
                 </Text>
                 <View style={{ flex: 1 }}>
-                  <Text
-                    style={{ color: c.text, fontSize: 18, fontWeight: "700" }}
-                  >
+                  <Text style={{ color: c.text, fontSize: 18, fontWeight: "700" }}>
                     {item.metadata?.title || "Unknown Track"}
                   </Text>
                   <Text style={{ color: c.sub, fontSize: 14 }}>
@@ -132,57 +112,6 @@ export default function PlaylistScreen() {
                   </Text>
                 </View>
               </View>
-
-              {/* Match Score */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginTop: 4,
-                }}
-              >
-                <View
-                  style={{
-                    backgroundColor: c.text,
-                    height: 4,
-                    borderRadius: 2,
-                    width: `${((1 - item.distance) * 100).toFixed(0)}%`,
-                  }}
-                />
-                <Text style={{ color: c.sub, fontSize: 12, marginLeft: 8 }}>
-                  {((1 - item.distance) * 100).toFixed(0)}% match
-                </Text>
-              </View>
-
-              {/* Metadata */}
-              {item.metadata && (
-                <View
-                  style={{
-                    marginTop: 12,
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  {item.metadata.tempo && (
-                    <Chip text={`${item.metadata.tempo} BPM`} c={c} />
-                  )}
-                  {item.metadata.energy && (
-                    <Chip
-                      text={`Energy ${(item.metadata.energy * 100).toFixed(
-                        0
-                      )}%`}
-                      c={c}
-                    />
-                  )}
-                  {item.metadata.valence && (
-                    <Chip
-                      text={`Mood ${(item.metadata.valence * 100).toFixed(0)}%`}
-                      c={c}
-                    />
-                  )}
-                </View>
-              )}
             </View>
           )}
           ListEmptyComponent={

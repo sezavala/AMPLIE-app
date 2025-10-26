@@ -1,11 +1,11 @@
 import { create } from "zustand";
-import type { ConsentPrefs } from "./consentStorage";
+import type { Consent } from "./consentStorage";
 
 type Mode = "reflect" | "work";
 
 type State = {
-  consent: ConsentPrefs | null;         // full object
-  setConsent: (prefs: ConsentPrefs) => void;
+  consent: Consent | null;         // full object
+  setConsent: (prefs: Consent) => void;
   mode: Mode | null;
   setMode: (m: Mode) => void;
 };
