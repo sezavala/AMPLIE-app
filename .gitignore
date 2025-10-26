@@ -51,3 +51,7 @@ android/keystores/debug.keystore
 
 expo-env.d.ts
 # @end expo-cli
+
+#added these
+.env
+.expo/*
