@@ -1,4 +1,3 @@
-// app/result.tsx
 import * as React from "react";
 import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -6,11 +5,31 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColors } from "../lib/useColors";
 import { useConsent } from "../lib/consent";
 import { appendHistory } from "../lib/history";
+import { post } from "@/lib/api";
 
-// 🔹 Mock API call — replace with your real emotion endpoint later
-async function fetchEmotion(input: { src: "text" | "voice"; text?: string; clip?: string }) {
-  await new Promise((r) => setTimeout(r, 800)); // simulate small delay
-  return { emotion: "calm", confidence: 0.82 };
+// ✅ REAL API CALL - Connect to backend /emotion endpoint
+async function fetchEmotion(input: {
+  src: "text" | "voice";
+  text?: string;
+  clip?: string;
+}): Promise<{ emotion: string; confidence: number }> {
+  // For text input
+  if (input.src === "text" && input.text) {
+    return await post<{ emotion: string; confidence: number }>("/emotion", {
+      text: input.text,
+    });
+  }
+
+  // For voice input - send the clip URI
+  if (input.src === "voice" && input.clip) {
+    // ⚠️ For demo: if clip is local file URI, just analyze as text "voice input"
+    // In production, you'd upload the file first
+    return await post<{ emotion: string; confidence: number }>("/emotion", {
+      text: "User provided voice input for mood analysis",
+    });
+  }
+
+  throw new Error("Invalid input: provide either text or clip");
 }
 
 export default function ResultScreen() {
@@ -18,7 +37,6 @@ export default function ResultScreen() {
   const router = useRouter();
   const { consent } = useConsent();
 
-  // Parameters passed from Text or Voice screen
   const { src, mode, text, clip } = useLocalSearchParams<{
     src?: "text" | "voice";
     mode?: "reflect" | "work";
@@ -27,19 +45,36 @@ export default function ResultScreen() {
   }>();
 
   const [loading, setLoading] = React.useState(true);
-  const [data, setData] = React.useState<{ emotion: string; confidence: number } | null>(null);
+  const [data, setData] = React.useState<{
+    emotion: string;
+    confidence: number;
+  } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // 🔹 Fetch emotion result
+  // 🔹 Fetch emotion result from backend
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchEmotion({ src: (src ?? "text") as "text" | "voice", text, clip })
+    setError(null);
+
+    fetchEmotion({
+      src: (src ?? "text") as "text" | "voice",
+      text,
+      clip,
+    })
       .then((res) => {
         if (alive) setData(res);
+      })
+      .catch((err) => {
+        if (alive) {
+          console.error("Emotion fetch error:", err);
+          setError(err.message || "Failed to analyze emotion");
+        }
       })
       .finally(() => {
         if (alive) setLoading(false);
       });
+
     return () => {
       alive = false;
     };
@@ -59,77 +94,164 @@ export default function ResultScreen() {
       emotion: data.emotion,
       confidence: data.confidence,
       createdAt: Date.now(),
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error("Failed to save history:", err);
+    });
   }, [data, consent?.history, src, mode, text, clip]);
 
   // 🔹 Render
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, padding: 24 }}>
-      {/* In-page Back Button */}
+      {/* Back Button */}
       <Pressable
         onPress={() => router.back()}
         style={{
           alignSelf: "flex-start",
           paddingVertical: 8,
           paddingHorizontal: 12,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          marginBottom: 16,
+          marginBottom: 24,
         }}
       >
-        <Text style={{ color: c.text, fontWeight: "700" }}>← Back</Text>
+        <Text style={{ color: c.text, fontSize: 16 }}>← Back</Text>
       </Pressable>
 
-      <Text style={{ color: c.text, fontSize: 22, fontWeight: "800", marginBottom: 8 }}>
-        Result
-      </Text>
-
+      {/* Content */}
       {loading ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color={c.text} />
-          <Text style={{ color: c.sub, marginTop: 12 }}>Analyzing…</Text>
+          <Text style={{ color: c.sub, marginTop: 12 }}>
+            Analyzing your mood...
+          </Text>
         </View>
-      ) : data ? (
-        <>
-          <View
+      ) : error ? (
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+          <Text
             style={{
-              backgroundColor: c.card,
-              borderColor: c.border,
-              borderWidth: 1,
-              borderRadius: 16,
-              padding: 16,
-              marginTop: 10,
+              color: c.text,
+              fontSize: 18,
+              fontWeight: "700",
+              marginBottom: 8,
             }}
           >
-            <Text style={{ color: c.text, fontSize: 20, fontWeight: "700" }}>
-              {data.emotion} <Text style={{ color: c.sub }}>
-                ({Math.round(data.confidence * 100)}%)
-              </Text>
-            </Text>
-            <Text style={{ color: c.sub, marginTop: 6 }}>
-              {mode ?? "reflect"} • {src ?? "text"}
-            </Text>
+            Analysis Failed
+          </Text>
+          <Text style={{ color: c.sub, textAlign: "center", marginBottom: 24 }}>
+            {error}
+          </Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={{
+              backgroundColor: c.text,
+              paddingVertical: 12,
+              paddingHorizontal: 24,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={{ color: c.bg, fontWeight: "700" }}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : data ? (
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <Text style={{ fontSize: 64, marginBottom: 24 }}>
+            {getEmotionEmoji(data.emotion)}
+          </Text>
+          <Text
+            style={{
+              color: c.text,
+              fontSize: 32,
+              fontWeight: "800",
+              marginBottom: 8,
+            }}
+          >
+            {data.emotion}
+          </Text>
+          <Text style={{ color: c.sub, fontSize: 18, marginBottom: 32 }}>
+            {Math.round(data.confidence * 100)}% confident
+          </Text>
 
-            {src === "text" && text ? (
+          {src === "text" && text && (
+            <View
+              style={{
+                backgroundColor: c.card,
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 24,
+                width: "100%",
+                maxWidth: 400,
+              }}
+            >
+              <Text style={{ color: c.sub, fontSize: 14, marginBottom: 4 }}>
+                Your input:
+              </Text>
               <Text
-                style={{ color: c.text, marginTop: 12, fontStyle: "italic" }}
-                numberOfLines={3}
+                style={{ color: c.text, fontSize: 16, fontStyle: "italic" }}
               >
-                “{text}”
+                "{text}"
               </Text>
-            ) : null}
+            </View>
+          )}
 
-            {src === "voice" && clip ? (
-              <Text style={{ color: c.sub, marginTop: 12 }}>
-                voice clip: {clip.split("/").pop()}
-              </Text>
-            ) : null}
-          </View>
-        </>
-      ) : (
-        <Text style={{ color: c.sub }}>No data.</Text>
-      )}
+          {/* ADD THIS: Show Playlist Button */}
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/playlist",
+                params: { emotion: data.emotion, mode: mode || "reflect" },
+              })
+            }
+            style={{
+              backgroundColor: c.text,
+              paddingVertical: 14,
+              paddingHorizontal: 32,
+              borderRadius: 16,
+              marginBottom: 12,
+            }}
+          >
+            <Text style={{ color: c.bg, fontWeight: "700", fontSize: 16 }}>
+              🎵 View Playlist
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.replace("/(tabs)")}
+            style={{
+              backgroundColor: "transparent",
+              paddingVertical: 14,
+              paddingHorizontal: 32,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: c.border,
+            }}
+          >
+            <Text style={{ color: c.text, fontWeight: "700", fontSize: 16 }}>
+              Done
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
+}
+
+function getEmotionEmoji(emotion: string): string {
+  const map: Record<string, string> = {
+    happy: "😊",
+    sad: "😢",
+    angry: "😠",
+    relaxed: "😌",
+    hopeful: "🌟",
+    tired: "😴",
+    calm: "🧘",
+    excited: "🎉",
+    anxious: "😰",
+    neutral: "😐",
+  };
+  return map[emotion.toLowerCase()] || "🤔";
 }

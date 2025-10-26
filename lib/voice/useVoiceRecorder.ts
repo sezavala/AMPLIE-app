@@ -1,39 +1,52 @@
-// lib/voice/useVoiceRecorder.ts
 import { useEffect, useRef, useState } from "react";
-import { Audio, AVPlaybackStatus } from "expo-av";
+import { Audio } from "expo-av";
 
-export type RecorderState = "idle" | "recording" | "recorded" | "playing" | "error" | "denied";
+export type RecorderState =
+  | "idle"
+  | "recording"
+  | "recorded"
+  | "playing"
+  | "error"
+  | "denied";
 
 export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
   const [state, setState] = useState<RecorderState>("idle");
   const [uri, setUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [levels, setLevels] = useState<number[]>([]); // 0..1 values for fake waveform
+  const [levels, setLevels] = useState<number[]>([]);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const startedAtRef = useRef<number | null>(null);
-
-  // RN timers return numbers
   const autoStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recordVizIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playVizIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordVizIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const playVizIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   async function ensurePermission() {
-    const { granted, canAskAgain, status } = await Audio.requestPermissionsAsync();
-    if (!granted) {
-      setState("denied");
-      setError(
-        status === "denied" && !canAskAgain
-          ? "Microphone access is blocked in Settings."
-          : "Microphone permission was denied."
-      );
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        setState("denied");
+        setError(
+          permission.canAskAgain
+            ? "Microphone permission was denied."
+            : "Microphone access is blocked in Settings."
+        );
+        return false;
+      }
+      setError(null);
+      return true;
+    } catch (e: any) {
+      setState("error");
+      setError(e?.message ?? "Failed to request permissions");
       return false;
     }
-    return true;
   }
 
-  // simple visual “wiggle” for waveform (no true metering)
   function pushVizSample(range: [number, number]) {
     const [lo, hi] = range;
     const v = lo + Math.random() * (hi - lo);
@@ -46,27 +59,28 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
     if (!ok) return;
 
     try {
+      // Set audio mode for recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
       setState("recording");
       setLevels([]);
       startedAtRef.current = Date.now();
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-
       const recording = new Audio.Recording();
-      // Use HIGH_QUALITY preset; no metering flags
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.prepareToRecordAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
       await recording.startAsync();
       recordingRef.current = recording;
 
-      // auto-stop at maxMs
       autoStopTimeoutRef.current = setTimeout(stop, maxMs);
-      // fake waveform during recording (subtle)
-      recordVizIntervalRef.current = setInterval(() => pushVizSample([0.06, 0.28]), 60);
+      recordVizIntervalRef.current = setInterval(
+        () => pushVizSample([0.06, 0.28]),
+        60
+      );
     } catch (e: any) {
       setState("error");
       setError(e?.message ?? "Failed to start recording");
@@ -78,23 +92,26 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
     if (!rec) return;
 
     try {
-      // enforce minimum duration
       const elapsed = Date.now() - (startedAtRef.current ?? Date.now());
-      if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+      if (elapsed < minMs) {
+        await new Promise((r) => setTimeout(r, minMs - elapsed));
+      }
 
       await rec.stopAndUnloadAsync();
-      setUri(rec.getURI() ?? null);
+      const recordingUri = rec.getURI();
+      setUri(recordingUri ?? null);
       setState("recorded");
+
+      // Reset audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
     } catch (e: any) {
       setState("error");
       setError(e?.message ?? "Failed to stop recording");
     } finally {
       clearRecordTimers();
       recordingRef.current = null;
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      }).catch(() => {});
     }
   }
 
@@ -102,10 +119,23 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
     if (!uri || state === "playing") return;
     try {
       setState("playing");
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true }, onPlayStatus);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true }
+      );
       soundRef.current = sound;
-      // more energetic fake waveform while playing
-      playVizIntervalRef.current = setInterval(() => pushVizSample([0.12, 0.5]), 80);
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          stopPlayback();
+        }
+      });
+
+      playVizIntervalRef.current = setInterval(
+        () => pushVizSample([0.12, 0.5]),
+        80
+      );
     } catch (e: any) {
       setState("error");
       setError(e?.message ?? "Failed to play");
@@ -113,25 +143,25 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
   }
 
   async function stopPlayback() {
-    const s = soundRef.current;
-    if (!s) return;
+    const sound = soundRef.current;
+    if (!sound) return;
     try {
-      await s.stopAsync();
-      await s.unloadAsync();
+      await sound.stopAsync();
+      await sound.unloadAsync();
+      soundRef.current = null;
     } catch {}
-    soundRef.current = null;
     setState("recorded");
     clearPlayViz();
-  }
-
-  function onPlayStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) return;
-    if (status.didJustFinish) stopPlayback();
   }
 
   function discard() {
     setUri(null);
     setLevels([]);
+    setError(null);
+    setState("idle");
+  }
+
+  function clearError() {
     setError(null);
     setState("idle");
   }
@@ -158,8 +188,12 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
     return () => {
       clearRecordTimers();
       clearPlayViz();
-      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
-      soundRef.current?.unloadAsync().catch(() => {});
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync();
+      }
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
     };
   }, []);
 
@@ -173,7 +207,7 @@ export function useVoiceRecorder({ maxMs = 6000, minMs = 3000 } = {}) {
     play,
     stopPlayback,
     discard,
-    clearError: () => setError(null),
+    clearError,
     isRecording: state === "recording",
     isPlaying: state === "playing",
     isReady: state === "recorded",

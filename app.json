@@ -10,10 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MuseLink uses the microphone to capture short voice clips for mood analysis."
-    }
+        "NSMicrophoneUsageDescription": "AMPLIE uses the microphone to capture short voice clips for mood analysis."
+      },
+      "bundleIdentifier": "com.amplie.app"
     },
     "android": {
+      "package": "com.amplie.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -42,16 +44,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-audio",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "clerkPublishableKey": "${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY}",
-      "jwtTemplate": "${EXPO_PUBLIC_JWT_TEMPLATE}",
-      "redirectScheme": "${EXPO_PUBLIC_REDIRECT_SCHEME}"
     }
   }
 }

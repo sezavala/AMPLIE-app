@@ -1,58 +1,127 @@
-import { Platform } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-import Constants from 'expo-constants';
-import { useOAuth } from '@clerk/clerk-expo';
-import React, { useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import {
+  Platform,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Image,
+} from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import { useOAuth } from "@clerk/clerk-expo";
+import React, { useCallback } from "react";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SignIn() {
-  const scheme = Constants.expoConfig?.extra?.redirectScheme || 'amplieapp';
-
-  // ✅ Use window.location.origin on web; scheme on native
-  const redirectUrl =
-    Platform.OS === 'web'
-      ? window.location.origin
-      : Linking.createURL('', { scheme });
-
-  const { startOAuthFlow: startGoogle } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startApple } = useOAuth({ strategy: 'oauth_apple' });
+  const { startOAuthFlow: googleAuth } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: appleAuth } = useOAuth({ strategy: "oauth_apple" });
 
   const doOAuth = useCallback(
-    async (which: 'google' | 'apple') => {
-      const start = which === 'google' ? startGoogle : startApple;
+    async (strategy: "google" | "apple") => {
       try {
-        const { createdSessionId, setActive } = await start({ redirectUrl });
+        const flow = strategy === "google" ? googleAuth : appleAuth;
+        const { createdSessionId, setActive } = await flow();
+
         if (createdSessionId && setActive) {
           await setActive({ session: createdSessionId });
         }
       } catch (err) {
-        console.error('OAuth error:', err);
+        console.error("OAuth error:", err);
       }
     },
-    [redirectUrl]
+    [googleAuth, appleAuth]
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign in to Amplie</Text>
+      <View style={styles.content}>
+        <Text style={styles.emoji}>🎵</Text>
+        <Text style={styles.title}>AMPLIE</Text>
+        <Text style={styles.subtitle}>Your AI Music Companion</Text>
 
-      <Pressable style={styles.button} onPress={() => doOAuth('google')}>
-        <Text>Continue with Google</Text>
-      </Pressable>
+        <View style={styles.buttons}>
+          <Pressable
+            style={[styles.button, styles.googleButton]}
+            onPress={() => doOAuth("google")}
+          >
+            <Text style={styles.buttonText}>Continue with Google</Text>
+          </Pressable>
 
-      <Pressable style={styles.button} onPress={() => doOAuth('apple')}>
-        <Text>Continue with Apple</Text>
-      </Pressable>
+          {Platform.OS === "ios" && (
+            <Pressable
+              style={[styles.button, styles.appleButton]}
+              onPress={() => doOAuth("apple")}
+            >
+              <Text style={[styles.buttonText, { color: "#fff" }]}>
+                Continue with Apple
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Text style={styles.privacy}>
+          By continuing, you agree to our Terms of Service and Privacy Policy
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  title: { fontSize: 22, fontWeight: '700' },
-  button: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  emoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 40,
+    fontWeight: "800",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#999",
+    marginBottom: 48,
+  },
+  buttons: {
+    width: "100%",
+    maxWidth: 320,
+    gap: 12,
+  },
+  button: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  googleButton: {
+    backgroundColor: "#fff",
+  },
+  appleButton: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+  },
+  privacy: {
+    marginTop: 32,
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    maxWidth: 280,
+  },
 });
-

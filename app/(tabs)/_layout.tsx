@@ -1,4 +1,3 @@
-// app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -40,7 +39,7 @@ export default function TabsLayout() {
         options={{
           title: "Text",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-ellipses" color={color} size={size} />
+            <Ionicons name="create" color={color} size={size} />
           ),
         }}
       />
@@ -72,6 +71,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings" color={color} size={size} />
           ),
+        }}
+      />
+
+      {/* Hide explore tab */}
+      <Tabs.Screen
+        name="explore"
+        options={{
+          href: null, // This hides it from the tab bar
         }}
       />
     </Tabs>

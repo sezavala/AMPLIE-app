@@ -1,195 +1,215 @@
 import * as React from "react";
-import { View, Text, FlatList, Pressable, RefreshControl } from "react-native";
-import { Audio } from "expo-av";
+import {
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import { useAudioPlayer } from "expo-audio";
+import { useRouter } from "expo-router";
+import { useColors } from "@/lib/useColors";
+import {
+  loadHistory,
+  clearHistory,
+  type HistoryItem as HistoryItemType,
+} from "@/lib/history";
 
-// Use relative imports to avoid alias issues
-import { useColors } from "../../lib/useColors";
-import { useConsent } from "../../lib/consent";
-import { loadHistory, type HistoryItem } from "../../lib/history";
-
-export default function HistoryTab() {
+export default function HistoryScreen() {
   const c = useColors();
-  const { loaded, consent } = useConsent();
-
-  const [items, setItems] = React.useState<HistoryItem[]>([]);
+  const router = useRouter();
   const [refreshing, setRefreshing] = React.useState(false);
-  const [playingId, setPlayingId] = React.useState<string | null>(null);
-  const soundRef = React.useRef<Audio.Sound | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [history, setHistory] = React.useState<HistoryItemType[]>([]);
 
-  // Load on mount
-  React.useEffect(() => {
-    if (!loaded) return;
-    reload();
-    // stop sound on unmount
-    return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    };
-  }, [loaded]);
-
-  async function reload() {
-    const data = await loadHistory();
-    // newest first (defensive), though appendHistory already does that
-    setItems([...data].sort((a, b) => b.createdAt - a.createdAt));
-  }
-
-  async function onRefresh() {
-    setRefreshing(true);
+  const loadData = React.useCallback(async () => {
     try {
-      await reload();
+      const data = await loadHistory();
+      setHistory(data);
+    } catch (error) {
+      console.error("Failed to load history:", error);
     } finally {
-      setRefreshing(false);
+      setLoading(false);
     }
-  }
+  }, []);
 
-  async function playClip(item: HistoryItem) {
-    if (!item.clipUri) return;
-    // stop any existing
-    if (soundRef.current) {
-      await soundRef.current.stopAsync().catch(() => {});
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
-      setPlayingId(null);
-    }
-    const { sound } = await Audio.Sound.createAsync({ uri: item.clipUri });
-    soundRef.current = sound;
-    setPlayingId(item.id);
-    sound.setOnPlaybackStatusUpdate((s) => {
-      if (s.isLoaded && s.didJustFinish) {
-        setPlayingId(null);
-        sound.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-    });
-    await sound.playAsync();
-  }
+  React.useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  async function stopClip() {
-    if (!soundRef.current) return;
-    try {
-      await soundRef.current.stopAsync();
-      await soundRef.current.unloadAsync();
-    } catch {}
-    soundRef.current = null;
-    setPlayingId(null);
-  }
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
 
-  // ---- States ----
-  if (!loaded) {
+  const handleClearAll = React.useCallback(async () => {
+    await clearHistory();
+    setHistory([]);
+  }, []);
+
+  if (loading) {
     return (
-      <Centered c={c}>
-        <Text style={{ color: c.text }}>Loading…</Text>
-      </Centered>
-    );
-  }
-
-  if (!consent?.history) {
-    return (
-      <Centered c={c}>
-        <Text style={{ color: c.text, fontSize: 18, fontWeight: "800", marginBottom: 6 }}>
-          History disabled
-        </Text>
-        <Text style={{ color: c.sub, textAlign: "center", paddingHorizontal: 24 }}>
-          Enable “Mood history” in Consent to save results and view them here.
-        </Text>
-      </Centered>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: c.bg,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={c.text} />
+      </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg, padding: 16 }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <View
+        style={{
+          padding: 16,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: c.text, fontSize: 24, fontWeight: "700" }}>
+          History
+        </Text>
+        {history.length > 0 && (
+          <Pressable onPress={handleClearAll} style={{ padding: 8 }}>
+            <Text style={{ color: c.sub, fontSize: 14 }}>Clear All</Text>
+          </Pressable>
+        )}
+      </View>
+
       <FlatList
-        data={items}
-        keyExtractor={(i) => i.id}
+        data={history}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <HistoryItem item={item} c={c} />}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
-          <Text style={{ color: c.sub, marginTop: 20, textAlign: "center" }}>
-            No entries yet. Run an analysis to see results here.
-          </Text>
-        }
-        renderItem={({ item }) => (
           <View
             style={{
-              backgroundColor: c.card,
-              borderColor: c.border,
-              borderWidth: 1,
-              borderRadius: 12,
-              padding: 12,
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 24,
+              minHeight: 400,
             }}
           >
-            <Text style={{ color: c.text, fontWeight: "800", fontSize: 16 }}>
-              {item.emotion} {Math.round(item.confidence * 100)}%
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>📊</Text>
+            <Text
+              style={{
+                color: c.text,
+                fontSize: 18,
+                fontWeight: "600",
+                marginBottom: 8,
+              }}
+            >
+              No History Yet
             </Text>
-            <Text style={{ color: c.sub, marginTop: 2 }}>
-              {new Date(item.createdAt).toLocaleString()} • {item.mode ?? "reflect"} • {item.src}
+            <Text style={{ color: c.sub, fontSize: 16, textAlign: "center" }}>
+              Start by analyzing your mood with voice or text!
             </Text>
-
-            {/* Text preview (if text source) */}
-            {item.src === "text" && item.text ? (
-              <Text style={{ color: c.text, marginTop: 8 }} numberOfLines={2}>
-                “{item.text}”
-              </Text>
-            ) : null}
-
-            {/* Voice controls (if voice source) */}
-            {item.src === "voice" && item.clipUri ? (
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                {playingId === item.id ? (
-                  <Btn title="Stop" onPress={stopClip} dark />
-                ) : (
-                  <Btn title="Play clip" onPress={() => playClip(item)} dark />
-                )}
-                {/* Optional: show filename */}
-                <Text
-                  style={{ color: c.sub, alignSelf: "center" }}
-                  numberOfLines={1}
-                >
-                  {item.clipUri.split("/").pop()}
-                </Text>
-              </View>
-            ) : null}
           </View>
-        )}
+        }
       />
     </View>
   );
 }
 
-/* ------- tiny UI helpers ------- */
-function Centered({ c, children }: { c: ReturnType<typeof useColors>; children: React.ReactNode }) {
-  return (
-    <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center", alignItems: "center", padding: 24 }}>
-      {children}
-    </View>
-  );
-}
+function HistoryItem({ item, c }: { item: HistoryItemType; c: any }) {
+  const player = useAudioPlayer(item.clipUri || "");
+  const [isPlaying, setIsPlaying] = React.useState(false);
 
-function Btn({
-  title,
-  onPress,
-  dark = false,
-}: {
-  title: string;
-  onPress: () => void;
-  dark?: boolean;
-}) {
+  const togglePlayback = async () => {
+    try {
+      if (isPlaying) {
+        player.pause();
+      } else {
+        player.play();
+      }
+      setIsPlaying(!isPlaying);
+    } catch (error) {
+      console.error("Playback error:", error);
+    }
+  };
+
+  const formattedDate = new Date(item.createdAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
-    <Pressable
-      onPress={onPress}
+    <View
       style={{
-        backgroundColor: dark ? "#111" : "transparent",
-        borderWidth: dark ? 0 : 1,
-        borderColor: "#444",
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 10,
-        alignItems: "center",
+        padding: 16,
+        marginHorizontal: 16,
+        marginVertical: 8,
+        backgroundColor: c.card,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: c.border,
       }}
     >
-      <Text style={{ color: dark ? "#fff" : "#ddd", fontWeight: "700" }}>{title}</Text>
-    </Pressable>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <Text style={{ color: c.text, fontSize: 18, fontWeight: "700" }}>
+          {item.emotion}
+        </Text>
+        <Text style={{ color: c.sub, fontSize: 14 }}>
+          {Math.round(item.confidence * 100)}%
+        </Text>
+      </View>
+
+      <Text style={{ color: c.sub, fontSize: 14, marginBottom: 8 }}>
+        {formattedDate} • {item.src === "voice" ? "🎤 Voice" : "✍️ Text"}
+        {item.mode && ` • ${item.mode}`}
+      </Text>
+
+      {item.text && (
+        <Text
+          style={{
+            color: c.text,
+            fontSize: 14,
+            fontStyle: "italic",
+            marginBottom: 8,
+          }}
+          numberOfLines={2}
+        >
+          "{item.text}"
+        </Text>
+      )}
+
+      {item.clipUri && (
+        <Pressable
+          onPress={togglePlayback}
+          style={{
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            backgroundColor: c.bg,
+            borderRadius: 8,
+            alignItems: "center",
+            marginTop: 8,
+          }}
+        >
+          <Text style={{ color: c.text, fontWeight: "600" }}>
+            {isPlaying ? "⏸️ Pause Recording" : "▶️ Play Recording"}
+          </Text>
+        </Pressable>
+      )}
+    </View>
   );
 }

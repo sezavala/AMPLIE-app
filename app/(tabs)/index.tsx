@@ -1,135 +1,263 @@
-import React, { useState } from 'react';
-import { Image } from 'expo-image';
-import { Platform, StyleSheet, Pressable, View } from 'react-native';
-import { Link } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-
-// ⬇️ use the hook, not a named function
-import { useAuthFetch } from '../../lib/authFetch';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/clerk-expo";
+import { useColors } from "@/lib/useColors";
+import { useConsent } from "@/lib/consent";
+import { get } from "@/lib/api";
 
 export default function HomeScreen() {
-  const { signOut } = useAuth();
-  const [result, setResult] = useState('');
-  const { authFetch } = useAuthFetch(); // ⬅️ get the wrapper from the hook
+  const c = useColors();
+  const router = useRouter();
+  const { signOut, isLoaded } = useAuth();
+  const { consent, loaded } = useConsent();
+  const [backendStatus, setBackendStatus] = useState<
+    "checking" | "online" | "offline"
+  >("checking");
 
-  const callMock = async () => {
-    const res = await authFetch('https://httpbin.org/anything', { method: 'GET' });
-    const json = await res.json();
-    // httpbin echoes headers; show Authorization to prove JWT injection
-    setResult(JSON.stringify(json.headers, null, 2));
-  };
+  // ✅ Load consent on mount
+  useEffect(() => {
+    if (!loaded) {
+      useConsent.getState().load();
+    }
+  }, [loaded]);
+
+  // ✅ Check backend health on mount
+  useEffect(() => {
+    async function checkBackend() {
+      try {
+        const health = await get<{ status: string }>("/health");
+        if (health.status === "ok") {
+          setBackendStatus("online");
+        } else {
+          setBackendStatus("offline");
+        }
+      } catch (err) {
+        console.error("Backend health check failed:", err);
+        setBackendStatus("offline");
+      }
+    }
+    checkBackend();
+  }, []);
+
+  // ✅ Show loading spinner while auth or consent loads
+  if (!isLoaded || !loaded) {
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: c.bg,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={c.text} />
+        <Text style={{ color: c.sub, marginTop: 12 }}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
+      {/* Backend Status Banner */}
+      {backendStatus === "offline" && (
+        <View
+          style={{
+            backgroundColor: "#ff4444",
+            padding: 12,
+            marginBottom: 16,
+            borderRadius: 8,
+          }}
+        >
+          <Text
+            style={{ color: "#fff", textAlign: "center", fontWeight: "600" }}
+          >
+            ⚠️ Backend offline. Start the server: cd AMPLIE-cloud && npm run dev
+          </Text>
+        </View>
+      )}
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({ ios: 'cmd + d', android: 'cmd + m', web: 'F12' })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
+      <View style={styles.content}>
+        <Text style={[styles.title, { color: c.text }]}>Welcome to AMPLIE</Text>
 
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction title="Share" icon="square.and.arrow.up" onPress={() => alert('Share pressed')} />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction title="Delete" icon="trash" destructive onPress={() => alert('Delete pressed')} />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+        <Text style={[styles.subtitle, { color: c.sub }]}>
+          Your AI-powered music companion
+        </Text>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
+        <View style={styles.features}>
+          <FeatureCard
+            title="Voice Analysis"
+            description="Record your voice and get personalized music"
+            emoji="🎤"
+            enabled={!!consent?.voice && backendStatus === "online"}
+            onPress={() => router.push("/voice")}
+            c={c}
+          />
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Auth Demo (Acceptance Test)</ThemedText>
+          <FeatureCard
+            title="Text Input"
+            description="Type how you feel and discover new music"
+            emoji="✍️"
+            enabled={!!consent?.text && backendStatus === "online"}
+            onPress={() => router.push("/text")}
+            c={c}
+          />
 
-        <Pressable style={styles.button} onPress={callMock}>
-          <ThemedText>Call Mock Auth API</ThemedText>
-        </Pressable>
+          <FeatureCard
+            title="Group Room"
+            description="Blend moods with friends"
+            emoji="👥"
+            enabled={backendStatus === "online"}
+            onPress={() => router.push("/group")}
+            c={c}
+          />
 
-        {!!result && (
-          <View style={styles.resultBox}>
-            <ThemedText selectable>{result}</ThemedText>
-          </View>
+          <FeatureCard
+            title="History"
+            description="Review your past mood analyses"
+            emoji="📊"
+            enabled={!!consent?.history}
+            onPress={() => router.push("/history")}
+            c={c}
+          />
+        </View>
+
+        {(!consent?.voice || !consent?.text || !consent?.history) && (
+          <Pressable
+            onPress={() => router.push("/consent")}
+            style={[
+              styles.consentButton,
+              { backgroundColor: c.card, borderColor: c.border },
+            ]}
+          >
+            <Text style={{ color: c.text, fontWeight: "600" }}>
+              ⚙️ Configure Permissions
+            </Text>
+          </Pressable>
         )}
 
-        <Pressable style={styles.button} onPress={() => signOut()}>
-          <ThemedText>Sign out</ThemedText>
+        <Pressable
+          onPress={() => signOut()}
+          style={[
+            styles.signOutButton,
+            { backgroundColor: "transparent", borderColor: c.border },
+          ]}
+        >
+          <Text style={{ color: c.sub, fontWeight: "600" }}>Sign Out</Text>
         </Pressable>
-      </ThemedView>
+      </View>
+    </View>
+  );
+}
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+function FeatureCard({
+  title,
+  description,
+  emoji,
+  enabled,
+  onPress,
+  c,
+}: {
+  title: string;
+  description: string;
+  emoji: string;
+  enabled: boolean;
+  onPress: () => void;
+  c: ReturnType<typeof useColors>;
+}) {
+  return (
+    <Pressable
+      onPress={enabled ? onPress : undefined}
+      style={[
+        styles.featureCard,
+        {
+          backgroundColor: enabled ? c.card : c.bg,
+          borderColor: enabled ? c.border : c.sub,
+          opacity: enabled ? 1 : 0.5,
+        },
+      ]}
+    >
+      <Text style={styles.emoji}>{emoji}</Text>
+      <Text style={[styles.featureTitle, { color: c.text }]}>{title}</Text>
+      <Text style={[styles.featureDescription, { color: c.sub }]}>
+        {description}
+      </Text>
+      {!enabled && (
+        <Text style={[styles.disabledText, { color: c.sub }]}>
+          {title === "Group Room" ? "Backend offline" : "Enable in settings"}
+        </Text>
+      )}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    padding: 24,
   },
-  stepContainer: {
-    gap: 8,
+  content: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "800",
     marginBottom: 8,
+    textAlign: "center",
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  subtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 40,
   },
-  button: {
+  features: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  featureCard: {
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignSelf: 'flex-start',
+    alignItems: "center",
   },
-  resultBox: {
-    width: '100%',
+  emoji: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  featureDescription: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  disabledText: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+  consentButton: {
+    padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
-    borderRadius: 12,
+    alignItems: "center",
+  },
+  signOutButton: {
     padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 16,
+    alignItems: "center",
   },
 });
