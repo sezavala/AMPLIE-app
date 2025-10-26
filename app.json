@@ -38,11 +38,18 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "clerkPublishableKey": "${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY}",
+      "jwtTemplate": "${EXPO_PUBLIC_JWT_TEMPLATE}",
+      "redirectScheme": "${EXPO_PUBLIC_REDIRECT_SCHEME}"
     }
   }
 }

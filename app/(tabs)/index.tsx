@@ -1,13 +1,29 @@
+import React, { useState } from 'react';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, Pressable, View } from 'react-native';
+import { Link } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+
+// ⬇️ use the hook, not a named function
+import { useAuthFetch } from '../../lib/authFetch';
 
 export default function HomeScreen() {
+  const { signOut } = useAuth();
+  const [result, setResult] = useState('');
+  const { authFetch } = useAuthFetch(); // ⬅️ get the wrapper from the hook
+
+  const callMock = async () => {
+    const res = await authFetch('https://httpbin.org/anything', { method: 'GET' });
+    const json = await res.json();
+    // httpbin echoes headers; show Authorization to prove JWT injection
+    setResult(JSON.stringify(json.headers, null, 2));
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -21,21 +37,19 @@ export default function HomeScreen() {
         <ThemedText type="title">Welcome!</ThemedText>
         <HelloWave />
       </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 1: Try it</ThemedText>
         <ThemedText>
           Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
           Press{' '}
           <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
+            {Platform.select({ ios: 'cmd + d', android: 'cmd + m', web: 'F12' })}
           </ThemedText>{' '}
           to open developer tools.
         </ThemedText>
       </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <Link href="/modal">
           <Link.Trigger>
@@ -44,18 +58,9 @@ export default function HomeScreen() {
           <Link.Preview />
           <Link.Menu>
             <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
+            <Link.MenuAction title="Share" icon="square.and.arrow.up" onPress={() => alert('Share pressed')} />
             <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
+              <Link.MenuAction title="Delete" icon="trash" destructive onPress={() => alert('Delete pressed')} />
             </Link.Menu>
           </Link.Menu>
         </Link>
@@ -64,6 +69,25 @@ export default function HomeScreen() {
           {`Tap the Explore tab to learn more about what's included in this starter app.`}
         </ThemedText>
       </ThemedView>
+
+      <ThemedView style={styles.stepContainer}>
+        <ThemedText type="subtitle">Auth Demo (Acceptance Test)</ThemedText>
+
+        <Pressable style={styles.button} onPress={callMock}>
+          <ThemedText>Call Mock Auth API</ThemedText>
+        </Pressable>
+
+        {!!result && (
+          <View style={styles.resultBox}>
+            <ThemedText selectable>{result}</ThemedText>
+          </View>
+        )}
+
+        <Pressable style={styles.button} onPress={() => signOut()}>
+          <ThemedText>Sign out</ThemedText>
+        </Pressable>
+      </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
         <ThemedText>
@@ -94,5 +118,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
+  },
+  button: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignSelf: 'flex-start',
+  },
+  resultBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
   },
 });
