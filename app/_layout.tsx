@@ -1,49 +1,43 @@
-// app/_layout.tsx
-import { Stack, usePathname, useRouter } from "expo-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
-import { View, ActivityIndicator } from "react-native";
-import { useConsent } from "@/lib/consent";
+import React, { useEffect } from 'react';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
+import 'react-native-reanimated';
 
-const qc = new QueryClient();
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { tokenCache } from '../lib/tokenCache';
 
-function Shell({ children }: { children: React.ReactNode }) {
-  const { loaded, consent, load } = useConsent();
-  const router = useRouter();
-  const pathname = usePathname();
-  const redirected = useRef(false);
+WebBrowser.maybeCompleteAuthSession();
 
-  // bootstrap consent from storage
-  useEffect(() => { load(); }, [load]);
-
-  // first-run redirect to /consent
-  useEffect(() => {
-    if (!loaded) return;
-    if (redirected.current) return;
-    // if no consent saved and we're not already on /consent
-    if (!consent && pathname !== "/consent") {
-      redirected.current = true;
-      router.replace("/consent");
-    }
-  }, [loaded, consent, pathname, router]);
-
-  if (!loaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
-  return <View style={{ flex: 1 }}>{children}</View>;
-}
+export const unstable_settings = {
+  anchor: '(tabs)', 
+};
 
 export default function RootLayout() {
+  const colorScheme = useColorScheme();
+
   return (
     <QueryClientProvider client={qc}>
       <Shell>
         <Stack screenOptions={{ headerShown: false }} />
       </Shell>
     </QueryClientProvider>
+  );
+}
+
+export default function RootLayout() {
+  if (!PUBLISHABLE_KEY) {
+    throw new Error('Missing Clerk publishable key (EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY)');
+  }
+  return (
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      <AuthGate>
+        <InnerLayout />
+      </AuthGate>
+    </ClerkProvider>
   );
 }
